@@ -1,0 +1,21 @@
+// sleep between to runs in seconds
+#define SLEEP_DURATION 0 
+// emergency hibernate countdown in seconds
+#define EMERGENCY_HIBERNATE 5 * 60
+
+// MQTT topic gets defined by "<MQTT_BASE_TOPIC>/<MAC_ADDRESS>/<property>"
+
+const char*   MQTT_HOST       = "jyrilehtinen.fi";
+const int     MQTT_PORT       = 1883;
+const char*   MQTT_CLIENTID   = "esp32-aqi";
+const char*   MQTT_USERNAME   = "usernamehere";
+const char*   MQTT_PASSWORD   = "passwordhere";
+const String  MQTT_BASE_TOPIC = "esp32AQIv2"; 
+const int     MQTT_RETRY_WAIT = 5000;
+
+
+const int SDS_SAMPLE_TIME = 1000;
+const int SDS_WARMUP_TIME =   30;            // changed from 10" to be longer ventilated
+const int SDS_READ_COUNT  =    5;
+
+const int CCS811_READ_COUNT  =    5;
