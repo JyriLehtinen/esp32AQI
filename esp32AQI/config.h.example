@@ -7,7 +7,7 @@
 
 const char*   MQTT_HOST       = "jyrilehtinen.fi";
 const int     MQTT_PORT       = 1883;
-const char*   MQTT_CLIENTID   = "esp32-aqi";
+const char*   MQTT_CLIENTID   = "uniqueclientid_abcded"; // Must be unique!
 const char*   MQTT_USERNAME   = "usernamehere";
 const char*   MQTT_PASSWORD   = "passwordhere";
 const String  MQTT_BASE_TOPIC = "esp32AQIv2"; 
