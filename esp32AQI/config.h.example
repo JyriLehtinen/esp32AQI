@@ -5,9 +5,9 @@
 
 // MQTT topic gets defined by "<MQTT_BASE_TOPIC>/<MAC_ADDRESS>/<property>"
 
-const char*   MQTT_HOST       = "jyrilehtinen.fi";
+const char*   MQTT_HOST       = "yourhostname.com";
 const int     MQTT_PORT       = 1883;
-const char*   MQTT_CLIENTID   = "esp32-aqi";
+const char*   MQTT_CLIENTID   = "uniqueclientidhere";
 const char*   MQTT_USERNAME   = "usernamehere";
 const char*   MQTT_PASSWORD   = "passwordhere";
 const String  MQTT_BASE_TOPIC = "esp32AQIv2"; 
