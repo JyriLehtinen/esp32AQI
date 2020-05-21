@@ -6,21 +6,27 @@
 #include <Wire.h>
 #include "esp_system.h"
 
-#include "DHT.h"
-#include "SDS011.h"
+// TODO: Replace commenting out with #ifdef macros for convenient sensor selection
+//#include "DHT.h"
+//#include "SDS011.h"
+
 #include "ccs811.h"
+#include "mh_z14a.h"
+#include "Adafruit_BMP280.h"
+#include "ClosedCube_HDC1080.h"
 
 
-#define DHT_PIN 19
+//#define DHT_PIN 19
 #define CCS_NWAKE_PIN 23
 
-#define DS_CO2_PIN 5
+//#define DS_CO2_PIN 5
 
 typedef struct value_s {
 	float pm25;
 	float pm10;
 	float temp;
 	float rh;
+	float pressure;
 	uint32_t eco2;
 	uint32_t etvoc;
 	uint16_t errstat;
@@ -38,11 +44,16 @@ void hibernate();
 void delayedHibernate(void *parameter);
 void setup();
 void loop();
-void activate_sds();
-uint8_t read_dht22(DHT unit, float* temp, float* rh);
+//uint8_t read_dht22(DHT unit, float* temp, float* rh);
+
+void activate_sensors(void);
+void read_sensors(value_s* data_s);
+void deactivate_sensors();
+
 void read_ccs811(CCS811 sensor, value_s* data_s, uint8_t read_count);
-uint8_t read_sds011(SDS011 sensor, float *pm25, float *pm10, uint8_t count);
-uint8_t read_ds_co2(uint8_t pin, uint32_t *co2, uint8_t count);
+//uint8_t read_sds011(SDS011 sensor, float *pm25, float *pm10, uint8_t count);
+//uint8_t read_ds_co2(uint8_t pin, uint32_t *co2, uint8_t count);
+
 uint8_t publish_mqtt(value_s* data_s, char* mac, char* wifi_ssid);
 void init_wtdg(void);
 
@@ -53,9 +64,15 @@ WiFiClient espClient;
 PubSubClient client(espClient);
 HardwareSerial port(2);
 
-DHT dht(DHT_PIN, DHT22);
-SDS011 sds;
+/************ SENSORS ***********/
+//DHT dht(DHT_PIN, DHT22);
+//SDS011 sds;
 CCS811 ccs811(CCS_NWAKE_PIN);
+MH_Z14A mh_z14a;
+Adafruit_BMP280 bmp280;
+ClosedCube_HDC1080 HDC1080;
+
+
 
 TaskHandle_t hibernateTaskHandle = NULL;
 int bootCount;
@@ -158,12 +175,7 @@ void delayedHibernate(void *parameter) {
 void setup() {
 	// all action is done when device is woken up
 	Serial.begin(115200);
-	sds.begin(&port);
-	dht.begin();
-	Wire.begin();
-	ccs811.set_i2cdelay(50);
-	pinMode(DS_CO2_PIN, INPUT);
-	delay(1000);
+
 
 	// increase boot count
 	bootCount++;
@@ -172,31 +184,20 @@ void setup() {
 #if SLEEP_DURATION
 	xTaskCreate(delayedHibernate, "hibernate", 4096, NULL, 1, &hibernateTaskHandle);
 #endif
+	
+	activate_sensors();
+	delay(1000);
 
 	// connect to Wifi or start as AP
 	connectWifi();
 
-	sds.wakeup();
-
+	delay(SDS_WARMUP_TIME * 1000);
 
 	value_s values;
-
-	if( !ccs811.begin() ) Serial.println("setup: CCS811 begin FAILED");
-	if( !ccs811.start(CCS811_MODE_1SEC) ) Serial.println("setup: CCS811 start FAILED");
-	delay(SDS_WARMUP_TIME * 1000);
-	
-	read_dht22(dht, &(values.temp), &(values.rh));
-
-	read_ccs811(ccs811, &values, CCS811_READ_COUNT);
-
-
-	read_sds011(sds, &(values.pm25), &(values.pm10), SDS_READ_COUNT);
-	read_ds_co2(DS_CO2_PIN, &(values.co2), 1);
+	read_sensors(&values);
 
 	// connect to mqtt server
 	connectMqtt();
-
-
 
 	getConnDetails(macAddr, wifiSSID);
 	publish_mqtt(&values, macAddr, wifiSSID);
@@ -205,7 +206,7 @@ void setup() {
 	// disconnect wifi and mqtt
 	disconnectWifi();
 	disconnectMqtt();
-	sds.sleep();
+	deactivate_sensors();
 
 	// delete emergency hibernate task
 	vTaskDelete(hibernateTaskHandle);
@@ -238,33 +239,123 @@ void loop() {
 
 	value_s values;
 	
-	read_dht22(dht, &(values.temp), &(values.rh));
-	read_ccs811(ccs811, &values, 1);
-	read_sds011(sds, &(values.pm25), &(values.pm10), 1);
-	read_ds_co2(DS_CO2_PIN, &(values.co2), 1);
+	read_sensors(&values);
 
 	publish_mqtt(&values, macAddr, wifiSSID); //TODO Assumes WiFi doesn't change without restarting
-  	delay(3000);
+  	delay(5000);
 #endif
 
 }
 
+void activate_sensors(void) {
+// UNUSED IN THIS BUILD
+	//sds.begin(&port);
+	//sds.wakeup();
+	//dht.begin();
+	//pinMode(DS_CO2_PIN, INPUT);
 
-void activate_sds() {
-	//TODO Implement me!
-	return;
+// CCS811
+	Wire.begin();
+	ccs811.set_i2cdelay(50);
+
+	if( !ccs811.begin() ) Serial.println("setup: CCS811 begin FAILED");
+	if( !ccs811.start(CCS811_MODE_1SEC) ) Serial.println("setup: CCS811 start FAILED");
+
+// BMP280
+	if (!bmp280.begin(0x76)) {
+		Serial.println("Could not find a valid BMP280 sensor, check wiring!");
+		while (true);
+	}
+
+	bmp280.setSampling(Adafruit_BMP280::MODE_NORMAL,     /* Operating Mode. */
+					Adafruit_BMP280::SAMPLING_X2,     /* Temp. oversampling */
+					Adafruit_BMP280::SAMPLING_X16,    /* Pressure oversampling */
+					Adafruit_BMP280::FILTER_X16,      /* Filtering. */
+					Adafruit_BMP280::STANDBY_MS_500); /* Standby time. */
+
+// HDC1080
+	HDC1080.begin(0x40);
+
+// MH-Z14A
+	mh_z14a.begin(&port);
 }
 
-uint8_t read_dht22(DHT unit, float* temp, float* rh) {
-	*temp = unit.readTemperature();
-	*rh = unit.readHumidity();
-	if ( isnan(*temp) || isnan(*rh)) {
-		Serial.println("[ERROR] Please check the DHT sensor !");
-		return 1;
-	}
+void read_sensors(value_s* data_s) {
+
+	//read_dht22(dht, &(values.temp), &(values.rh));
+	//read_sds011(sds, &(values.pm25), &(values.pm10), 1);
+	//read_ds_co2(DS_CO2_PIN, &(values.co2), 1);
+	
+	data_s->temp = HDC1080.readTemperature();
+	data_s->rh = HDC1080.readHumidity();
+
+	ccs811.set_envdata(data_s->temp, data_s->rh);
+	data_s->pressure = bmp280.readPressure();
+	mh_z14a.read( &(data_s->co2) );
+	read_ccs811(ccs811, data_s, 1);
+
+}
+
+uint8_t publish_mqtt(value_s* data_s, char* mac, char* wifi_ssid) {
+	String baseTopic = MQTT_BASE_TOPIC + "/" + mac + "/";
+/*
+	Serial.print("PM2.5 ");
+	Serial.print(data_s->pm25);
+	Serial.print("\tPM10 ");
+	Serial.print(data_s->pm10);
+*/
+	Serial.print("\tTemp ");
+	Serial.print(data_s->temp);
+	Serial.print("\tHum ");
+	Serial.print(data_s->rh);
+	Serial.print("\tPressure ");
+	Serial.print(data_s->pressure);
+	Serial.print("\teCO2 ");
+	Serial.print(data_s->eco2);
+	Serial.print("\tCO2 ");
+	Serial.print(data_s->co2);
+	Serial.print("\teTVOC ");
+	Serial.println(data_s->etvoc);
+
+	char buffer[128];
+	/*
+	snprintf(buffer, 128, "{\"data\":{\"value\":%f, \"unit\": \"ug/m^3\"}, \"meta\":{\"wifi\":\"%s\"}}", data_s->pm25, wifi_ssid);
+	client.publish((baseTopic + "pm2.5").c_str(), buffer); 
+
+	snprintf(buffer, 128, "{\"data\":{\"value\":%f, \"unit\": \"ug/m^3\"}, \"meta\":{\"wifi\":\"%s\"}}", data_s->pm10, wifi_ssid);
+	client.publish((baseTopic + "pm10").c_str(), buffer);
+	*/
+
+	snprintf(buffer, 128, "{\"data\":{\"value\":%f, \"unit\": \"C\"}, \"meta\":{\"wifi\":\"%s\"}}", data_s->temp, wifi_ssid);
+	client.publish((baseTopic + "temperature").c_str(), buffer);
+	
+	snprintf(buffer, 128, "{\"data\":{\"value\":%f, \"unit\": \"\%\"}, \"meta\":{\"wifi\":\"%s\"}}", data_s->rh, wifi_ssid);
+	client.publish((baseTopic + "humidity").c_str(), buffer);
+
+	snprintf(buffer, 128, "{\"data\":{\"value\":%f, \"unit\": \"Pa\"}, \"meta\":{\"wifi\":\"%s\"}}", data_s->pressure, wifi_ssid);
+	client.publish((baseTopic + "pressure").c_str(), buffer);
+	
+	snprintf(buffer, 128, "{\"data\":{\"value\":%d, \"unit\": \"ppm\"}, \"meta\":{\"wifi\":\"%s\"}}", data_s->eco2, wifi_ssid);
+	client.publish((baseTopic + "eco2").c_str(), buffer);
+	
+	snprintf(buffer, 128, "{\"data\":{\"value\":%d, \"unit\": \"ppm\"}, \"meta\":{\"wifi\":\"%s\"}}", data_s->co2, wifi_ssid);
+	client.publish((baseTopic + "co2").c_str(), buffer);
+
+	snprintf(buffer, 128, "{\"data\":{\"value\":%d, \"unit\": \"ppb\"}, \"meta\":{\"wifi\":\"%s\"}}", data_s->etvoc, wifi_ssid);
+	client.publish((baseTopic + "etvoc").c_str(), buffer);
+
+	delay(1000); // Needed to allow the WiFi peripheral to flush the data. Otherwise might go to sleep before TX is complete
 
 	return 0;
 }
+
+void deactivate_sensors() {
+	//TODO Implement me!
+	//sds.sleep();
+	return;
+}
+
+
 
 void read_ccs811(CCS811 sensor, value_s* data_s, uint8_t count) {
 	// Pass environmental data from DHT22 to CCS811
@@ -317,47 +408,14 @@ void read_ccs811(CCS811 sensor, value_s* data_s, uint8_t count) {
 	return;
 }
 
-uint8_t publish_mqtt(value_s* data_s, char* mac, char* wifi_ssid) {
-	String baseTopic = MQTT_BASE_TOPIC + "/" + mac + "/";
-
-	Serial.print("PM2.5 ");
-	Serial.print(data_s->pm25);
-	Serial.print("\tPM10 ");
-	Serial.print(data_s->pm10);
-	Serial.print("\tTemp ");
-	Serial.print(data_s->temp);
-	Serial.print("\tHum ");
-	Serial.print(data_s->rh);
-	Serial.print("\teCO2 ");
-	Serial.print(data_s->eco2);
-	Serial.print("\tCO2 ");
-	Serial.print(data_s->co2);
-	Serial.print("\teTVOC ");
-	Serial.println(data_s->etvoc);
-
-	char buffer[128];
-	snprintf(buffer, 128, "{\"data\":{\"value\":%f, \"unit\": \"ug/m^3\"}, \"meta\":{\"wifi\":\"%s\"}}", data_s->pm25, wifi_ssid);
-	client.publish((baseTopic + "pm2.5").c_str(), buffer); 
-
-	snprintf(buffer, 128, "{\"data\":{\"value\":%f, \"unit\": \"ug/m^3\"}, \"meta\":{\"wifi\":\"%s\"}}", data_s->pm10, wifi_ssid);
-	client.publish((baseTopic + "pm10").c_str(), buffer);
-
-	snprintf(buffer, 128, "{\"data\":{\"value\":%f, \"unit\": \"C\"}, \"meta\":{\"wifi\":\"%s\"}}", data_s->temp, wifi_ssid);
-	client.publish((baseTopic + "temperature").c_str(), buffer);
-	
-	snprintf(buffer, 128, "{\"data\":{\"value\":%f, \"unit\": \"\%\"}, \"meta\":{\"wifi\":\"%s\"}}", data_s->rh, wifi_ssid);
-	client.publish((baseTopic + "humidity").c_str(), buffer);
-	
-	snprintf(buffer, 128, "{\"data\":{\"value\":%d, \"unit\": \"ppm\"}, \"meta\":{\"wifi\":\"%s\"}}", data_s->eco2, wifi_ssid);
-	client.publish((baseTopic + "eco2").c_str(), buffer);
-	
-	snprintf(buffer, 128, "{\"data\":{\"value\":%d, \"unit\": \"ppm\"}, \"meta\":{\"wifi\":\"%s\"}}", data_s->co2, wifi_ssid);
-	client.publish((baseTopic + "co2").c_str(), buffer);
-
-	snprintf(buffer, 128, "{\"data\":{\"value\":%d, \"unit\": \"ppb\"}, \"meta\":{\"wifi\":\"%s\"}}", data_s->etvoc, wifi_ssid);
-	client.publish((baseTopic + "etvoc").c_str(), buffer);
-
-	delay(1000); // Needed to allow the WiFi peripheral to flush the data. Otherwise might go to sleep before TX is complete
+/*
+uint8_t read_dht22(DHT unit, float* temp, float* rh) {
+	*temp = unit.readTemperature();
+	*rh = unit.readHumidity();
+	if ( isnan(*temp) || isnan(*rh)) {
+		Serial.println("[ERROR] Please check the DHT sensor !");
+		return 1;
+	}
 
 	return 0;
 }
@@ -381,13 +439,13 @@ uint8_t read_sds011(SDS011 sensor, float *pm25, float *pm10, uint8_t count) {
 		// Save average values
 		*pm25 = *pm25/samples;
 		*pm10 = *pm10/samples;
-		/*//DEBUG
-			Serial.print("SDS011 readings: pm2.5:\t");
-			Serial.print(*pm25);
-			Serial.print("\tpm10:\t");
-			Serial.println(*pm10);
 		//DEBUG
-		*/
+			//Serial.print("SDS011 readings: pm2.5:\t");
+			//Serial.print(*pm25);
+			//Serial.print("\tpm10:\t");
+			//Serial.println(*pm10);
+		//DEBUG
+		
 		return 0;
 	}
 	else
@@ -416,6 +474,8 @@ uint8_t read_ds_co2(uint8_t pin, uint32_t *co2, uint8_t count) {
 		return 1;
 
 }
+
+*/
 
 uint8_t get_rx_checksum(uint8_t *msg) {
 	// Only the data bits are used
