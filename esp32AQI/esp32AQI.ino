@@ -226,8 +226,9 @@ void loop() {
 
 #else
   	timerWrite(timer, 0);
-  	if(WiFi.status() != WL_CONNECTED) {
+  	while(WiFi.status() != WL_CONNECTED) {
 		WiFi.reconnect();
+		delay(10000);
 	}
 	while(!client.connected()) {
 		if (!client.connect(MQTT_CLIENTID, MQTT_USERNAME, MQTT_PASSWORD)) {
