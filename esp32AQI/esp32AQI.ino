@@ -97,6 +97,7 @@ void init_wtdg(void) {
 	timer = timerBegin(0, 80, true); //timer 0, div 80
     timerAttachInterrupt(timer, &resetModule, true);
 	timerAlarmWrite(timer, 600000000, false); //set time in us
+	timerAlarmEnable(timer);
 }
 
 void connectWifi() {
