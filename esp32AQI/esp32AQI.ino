@@ -7,20 +7,22 @@
 #include "esp_system.h"
 
 // TODO: Replace commenting out with #ifdef macros for convenient sensor selection
-//#include "DHT.h"
+#include "DHT.h"
 //#include "SDS011.h"
 
+/*
 #include "ccs811.h"
 #include "mh_z14a.h"
 #include "Adafruit_BMP280.h"
 #include "ClosedCube_HDC1080.h"
 #include "APDS9930.h"
+*/
 
 
-//#define DHT_PIN 19
-#define CCS_NWAKE_PIN 23
+#define DHT_PIN 15
+//#define CCS_NWAKE_PIN 23
 
-#define TEMP_OFFSET 3.5
+//#define TEMP_OFFSET 3.5
 
 //#define DS_CO2_PIN 5
 
@@ -54,7 +56,7 @@ void activate_sensors(void);
 void read_sensors(value_s* data_s);
 void deactivate_sensors();
 
-void read_ccs811(CCS811 sensor, value_s* data_s, uint8_t read_count);
+//void read_ccs811(CCS811 sensor, value_s* data_s, uint8_t read_count);
 //uint8_t read_sds011(SDS011 sensor, float *pm25, float *pm10, uint8_t count);
 //uint8_t read_ds_co2(uint8_t pin, uint32_t *co2, uint8_t count);
 
@@ -66,16 +68,16 @@ AutoConnect portal;
 
 WiFiClient espClient;
 PubSubClient client(espClient);
-HardwareSerial port(2);
+//HardwareSerial port(2);
 
 /************ SENSORS ***********/
-//DHT dht(DHT_PIN, DHT22);
+DHT dht(DHT_PIN, DHT22);
 //SDS011 sds;
-CCS811 ccs811(CCS_NWAKE_PIN);
-MH_Z14A mh_z14a;
-Adafruit_BMP280 bmp280;
-ClosedCube_HDC1080 HDC1080;
-APDS9930 apds = APDS9930();
+//CCS811 ccs811(CCS_NWAKE_PIN);
+//MH_Z14A mh_z14a;
+//Adafruit_BMP280 bmp280;
+//ClosedCube_HDC1080 HDC1080;
+//APDS9930 apds = APDS9930();
 
 
 
@@ -194,7 +196,7 @@ void setup() {
 	// connect to Wifi or start as AP
 	connectWifi();
 
-	delay(SDS_WARMUP_TIME * 1000);
+	//delay(SDS_WARMUP_TIME * 1000);
 
 	value_s values;
 	read_sensors(&values);
@@ -246,7 +248,7 @@ void loop() {
 	read_sensors(&values);
 
 	publish_mqtt(&values, macAddr, wifiSSID); //TODO Assumes WiFi doesn't change without restarting
-  	delay(5000);
+  	delay(3000);
 #endif
 
 }
@@ -255,9 +257,10 @@ void activate_sensors(void) {
 // UNUSED IN THIS BUILD
 	//sds.begin(&port);
 	//sds.wakeup();
-	//dht.begin();
+	dht.begin();
 	//pinMode(DS_CO2_PIN, INPUT);
 
+	/*
 // CCS811
 	Wire.begin();
 	ccs811.set_i2cdelay(50);
@@ -271,11 +274,11 @@ void activate_sensors(void) {
 		while (true);
 	}
 
-	bmp280.setSampling(Adafruit_BMP280::MODE_NORMAL,     /* Operating Mode. */
-					Adafruit_BMP280::SAMPLING_X2,     /* Temp. oversampling */
-					Adafruit_BMP280::SAMPLING_X8,    /* Pressure oversampling */
-					Adafruit_BMP280::FILTER_X16,      /* Filtering. */
-					Adafruit_BMP280::STANDBY_MS_2000); /* Standby time. */
+	bmp280.setSampling(Adafruit_BMP280::MODE_NORMAL,     // Operating Mode. //
+					Adafruit_BMP280::SAMPLING_X2,     // Temp. oversampling //
+					Adafruit_BMP280::SAMPLING_X8,    // Pressure oversampling //
+					Adafruit_BMP280::FILTER_X16,      // Filtering. //
+					Adafruit_BMP280::STANDBY_MS_2000); // Standby time. //
 
 // HDC1080
 	HDC1080.begin(0x40);
@@ -302,14 +305,16 @@ void activate_sensors(void) {
 	if ( !apds.enableLightSensor(false) ) {
 		Serial.println(F("Something went wrong during light sensor init!"));
 	}
+	*/
 }
 
 void read_sensors(value_s* data_s) {
 
-	//read_dht22(dht, &(values.temp), &(values.rh));
+	read_dht22(dht, &(data_s->temp), &(data_s->rh));
 	//read_sds011(sds, &(values.pm25), &(values.pm10), 1);
 	//read_ds_co2(DS_CO2_PIN, &(values.co2), 1);
 	
+	/*
 	float temp_temp = HDC1080.readTemperature();
 
 	// To prevent false readings at boot
@@ -325,6 +330,7 @@ void read_sensors(value_s* data_s) {
 	read_ccs811(ccs811, data_s, 1);
 	if (  !apds.readAmbientLightLux(data_s->light) )
 		Serial.println(F("Error reading light values"));
+		*/
 
 }
 
@@ -340,6 +346,7 @@ uint8_t publish_mqtt(value_s* data_s, char* mac, char* wifi_ssid) {
 	Serial.print(data_s->temp);
 	Serial.print(F("\tHum "));
 	Serial.print(data_s->rh);
+	/*
 	Serial.print(F("\tPressure "));
 	Serial.print(data_s->pressure);
 	Serial.print(F("\teCO2 "));
@@ -349,7 +356,10 @@ uint8_t publish_mqtt(value_s* data_s, char* mac, char* wifi_ssid) {
 	Serial.print(F("\teTVOC "));
 	Serial.print(data_s->etvoc);
 	Serial.print(F("\tLight "));
-	Serial.println(data_s->light);
+	Serial.print(data_s->light);
+
+	*/
+	Serial.println();
 
 	char buffer[128];
 	/*
@@ -366,6 +376,7 @@ uint8_t publish_mqtt(value_s* data_s, char* mac, char* wifi_ssid) {
 	snprintf(buffer, 128, "{\"data\":{\"value\":%f, \"unit\": \"\%\"}, \"meta\":{\"wifi\":\"%s\"}}", data_s->rh, wifi_ssid);
 	client.publish((baseTopic + "humidity").c_str(), buffer);
 
+	/*
 	snprintf(buffer, 128, "{\"data\":{\"value\":%f, \"unit\": \"Pa\"}, \"meta\":{\"wifi\":\"%s\"}}", data_s->pressure, wifi_ssid);
 	client.publish((baseTopic + "pressure").c_str(), buffer);
 	
@@ -380,6 +391,7 @@ uint8_t publish_mqtt(value_s* data_s, char* mac, char* wifi_ssid) {
 
 	snprintf(buffer, 128, "{\"data\":{\"value\":%f, \"unit\": \"lux\"}, \"meta\":{\"wifi\":\"%s\"}}", data_s->light, wifi_ssid);
 	client.publish((baseTopic + "light").c_str(), buffer);
+	*/
 
 	delay(1000); // Needed to allow the WiFi peripheral to flush the data. Otherwise might go to sleep before TX is complete
 
@@ -394,6 +406,7 @@ void deactivate_sensors() {
 
 
 
+/*
 void read_ccs811(CCS811 sensor, value_s* data_s, uint8_t count) {
 	// Pass environmental data from DHT22 to CCS811
 	uint16_t t_data, h_data;
@@ -444,8 +457,8 @@ void read_ccs811(CCS811 sensor, value_s* data_s, uint8_t count) {
 	}
 	return;
 }
+*/
 
-/*
 uint8_t read_dht22(DHT unit, float* temp, float* rh) {
 	*temp = unit.readTemperature();
 	*rh = unit.readHumidity();
@@ -457,6 +470,7 @@ uint8_t read_dht22(DHT unit, float* temp, float* rh) {
 	return 0;
 }
 
+/*
 uint8_t read_sds011(SDS011 sensor, float *pm25, float *pm10, uint8_t count) {
 	// FIXME Add a timeout
 	float temp25, temp10;
