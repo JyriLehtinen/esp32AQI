@@ -129,7 +129,7 @@ uint8_t getConnDetails(char* mac, char* wifiSSID)
 {
 	uint8_t macAddr[6];
 	WiFi.macAddress(macAddr);
-	sprintf(mac, "%2X:%2X:%2X:%2X:%2X:%2X",
+	sprintf(mac, "%02X:%02X:%02X:%02X:%02X:%02X",
 	macAddr[0],
 	macAddr[1],
 	macAddr[2],
