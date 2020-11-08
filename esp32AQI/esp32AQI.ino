@@ -126,6 +126,7 @@ void disconnectWifi() {
 
 void connectMqtt() {
   Serial.println(F("Connecting to MQTT..."));
+  client.setBufferSize(256);
   client.setServer(MQTT_HOST, MQTT_PORT);
 
   while (!client.connected()) {
@@ -149,7 +150,7 @@ uint8_t getConnDetails(char* mac, char* wifiSSID)
 {
 	uint8_t macAddr[6];
 	WiFi.macAddress(macAddr);
-	sprintf(mac, "%2X:%2X:%2X:%2X:%2X:%2X",
+	sprintf(mac, "%02X:%02X:%02X:%02X:%02X:%02X",
 	macAddr[0],
 	macAddr[1],
 	macAddr[2],
@@ -246,7 +247,7 @@ void loop() {
 	read_sensors(&values);
 
 	publish_mqtt(&values, macAddr, wifiSSID); //TODO Assumes WiFi doesn't change without restarting
-  	delay(5000);
+  	delay(3000);
 #endif
 
 }
@@ -351,7 +352,7 @@ uint8_t publish_mqtt(value_s* data_s, char* mac, char* wifi_ssid) {
 	Serial.print(F("\tLight "));
 	Serial.println(data_s->light);
 
-	char buffer[128];
+	char buffer[256];
 	/*
 	snprintf(buffer, 128, "{\"data\":{\"value\":%f, \"unit\": \"ug/m^3\"}, \"meta\":{\"wifi\":\"%s\"}}", data_s->pm25, wifi_ssid);
 	client.publish((baseTopic + "pm2.5").c_str(), buffer); 
